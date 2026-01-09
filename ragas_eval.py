@@ -1,47 +1,18 @@
-import os
-from dotenv import load_dotenv
-from datasets import Dataset
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
 
-from ragas import evaluate
-from ragas.metrics.collections import (
-    Faithfulness,
-    AnswerRelevancy,
-    ContextPrecision,
-    ContextRecall,
-)
-
-from langchain_groq import ChatGroq
-
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from src.retriever import MaritimeHybridRetriever
 from src.generator import MaritimeGenerator
 
-
-# --------------------------------------------------
-# Load environment variables (.env in project root)
-# --------------------------------------------------
-load_dotenv()
-
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    raise ValueError("GROQ_API_KEY not found in environment variables")
-
-
-# --------------------------------------------------
-# Use SAME LLM for generation + evaluation
-# --------------------------------------------------
-ragas_llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    api_key=GROQ_API_KEY,
-    temperature=0,
-)
+# ------------------------------
+# Setup
+# ------------------------------
+emb = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en-v1.5")
 
 retriever = MaritimeHybridRetriever()
 generator = MaritimeGenerator()
 
-
-# --------------------------------------------------
-# Evaluation Queries
-# --------------------------------------------------
 questions = [
     "What is the main focus of the Amrit Kaal Vision 2047?",
     "Who provided messages in the document, and what is the key message from the Prime Minister?",
@@ -50,16 +21,38 @@ questions = [
     "What visual elements are in the Executive Summary page?",
 ]
 
+# ------------------------------
+# Metric functions
+# ------------------------------
+def embed(texts):
+    return np.array(emb.embed_documents(texts))
 
-# --------------------------------------------------
-# Build RAGAS Dataset
-# --------------------------------------------------
-data = {
-    "question": [],
-    "answer": [],
-    "contexts": [],
-    "ground_truth": [],
-}
+def context_precision(contexts, answer, threshold=0.6):
+    if not contexts:
+        return 0.0
+
+    ctx_emb = embed(contexts)
+    ans_emb = np.array(emb.embed_query(answer)).reshape(1, -1)
+
+    sims = cosine_similarity(ctx_emb, ans_emb).flatten()
+    relevant = sum(sim > threshold for sim in sims)
+
+    return round(relevant / len(contexts), 3)
+
+def context_recall(contexts, answer):
+    if not contexts or not answer:
+        return 0.0
+
+    ctx_emb = embed(contexts)
+    ans_emb = np.array(emb.embed_query(answer)).reshape(1, -1)
+
+    sims = cosine_similarity(ans_emb, ctx_emb).flatten()
+    return round(float(np.max(sims)), 3)
+
+# ------------------------------
+# Evaluation
+# ------------------------------
+results = []
 
 for q in questions:
     docs, _ = retriever.retrieve(q)
@@ -67,28 +60,12 @@ for q in questions:
 
     contexts = [d.page_content for d in docs]
 
-    data["question"].append(q)
-    data["answer"].append(answer)
-    data["contexts"].append(contexts)
+    results.append({
+        "Question": q,
+        "Context Precision": context_precision(contexts, answer),
+        "Context Recall": context_recall(contexts, answer),
+    })
 
-    # Proxy ground truth (official RAGAS recommendation)
-    data["ground_truth"].append(contexts[0] if contexts else "")
-
-dataset = Dataset.from_dict(data)
-
-
-# --------------------------------------------------
-# RAGAS Evaluation (✅ CORRECT)
-# --------------------------------------------------
-results = evaluate(
-    dataset=dataset,
-    metrics=[
-        Faithfulness(llm=ragas_llm),
-        AnswerRelevancy(llm=ragas_llm),
-        ContextPrecision(llm=ragas_llm),
-        ContextRecall(llm=ragas_llm),
-    ],
-)
-
-print("\n📊 RAGAS EVALUATION RESULTS")
-print(results)
+print("\n📊 SEMANTIC RAG EVALUATION RESULTS")
+for r in results:
+    print(r)
