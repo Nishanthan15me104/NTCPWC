@@ -34,6 +34,6 @@ for i, query in enumerate(queries, 1):
     print(f"\nQ{i}: {query}")
     print(answer)
 
-print("\n📊 PERFORMANCE METRICS")
+print("\n PERFORMANCE METRICS")
 for m in metrics:
     print(m)

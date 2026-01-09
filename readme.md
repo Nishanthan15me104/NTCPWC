@@ -170,3 +170,21 @@ python ragas_eval.py
 ```
 
 
+# Deviations from Original Task Requirements
+
+- Image Embedding Model (CLIP not used,Used BLIP for image captioning,Used BAAI/bge-small-en-v1.5 for embedding image captions instead of CLIP)
+
+- Chunk Size & Overlap (800 / 100 instead of 500 / 50
+
+- Hybrid Orchestration (LangChain used instead of LlamaIndex)
+
+ - Hybrid Fusion & Reranking
+
+ # improvements 
+
+ - 1: Proper Hybrid Reranking
+ - 2: Clearer & Safer Prompting (Anti-Hallucination)
+ - 3: Display Images in Output (Very Important for Multimodal)
+ - 4: True Multimodal Triggering (Better than keyword list)
+ - 5: Multimodal Score Fusion
+ - 6: Evaluation Metrics (need to do ragas)

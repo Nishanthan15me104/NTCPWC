@@ -16,6 +16,9 @@ class MultimodalProcessor:
 
     def process_page_images(self, page_data):
         """Worker function for threading"""
+        """Convert PIL → OpenCV"""
+        """Convert to grayscale"""
+        """Contour detection"""
         page_num, page_image = page_data
         image_metadata = []
         open_cv_image = cv2.cvtColor(np.array(page_image), cv2.COLOR_RGB2BGR)

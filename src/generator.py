@@ -40,7 +40,7 @@ Question: {query}
 Answer:
 """
 
-        # ⏱️ LLM RESPONSE TIME
+        #  LLM RESPONSE TIME
         t0 = time.time()
         response = self.llm.complete(prompt)
         llm_time = time.time() - t0
