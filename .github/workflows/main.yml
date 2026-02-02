@@ -1,4 +1,4 @@
-name: Maritime RAG CI
+name: Maritime RAG Full System Check
 
 on:
   push:
@@ -8,27 +8,49 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest     # The free Linux VM GitHub provides
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code    # Step 1: Copy your code to the VM
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Python    # Step 2: Install Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip' # This speeds up your runs by remembering installed libs
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          # We install only what's needed for the test to save time
-          pip install pytest python-dotenv
-          # If you have a requirements file, uncomment the line below:
-          # pip install -r requirements.txt 
+          # Added system libs for OpenCV and your specific RAG libraries
+          sudo apt-get update && sudo apt-get install -y libgl1-mesa-glx
+          pip install pytest python-dotenv torch torchvision transformers langchain-community faiss-cpu sentence-transformers pdf2image pymupdf llama-index-llms-groq
 
-      - name: Run Environment Tests
+      - name: 1. Run Environment Tests
+        # We keep this! It's your "Gatekeeper"
         env:
-          # This links your GitHub Secret to the test environment
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: pytest test_env.py
+
+      - name: 2. Generate Mock Data for System Check
+        # This creates the tiny files so the next steps don't crash
+        run: |
+          mkdir -p data/extracted/images
+          echo '{"text": [{"text": "The vessel shall be equipped with shore-side power connection points. Safety protocols for maritime operations include emergency shut-off valves.", "page_num": 1}], "images": []}' > data/extracted/metadata.json
+          python -c "from PIL import Image; Image.new('RGB', (200, 200), color='red').save('data/extracted/images/img_1_1.png')"
+
+      - name: 3. Test Text Indexing Logic
+        run: python src/build_text_index.py
+
+      - name: 4. Test Image Indexing Logic
+        run: python src/build_image_index.py
+
+      - name: 5. Final FAISS Validation
+        run: |
+          if [ -f "data/faiss/text/index.faiss" ] && [ -f "data/faiss/images/index.faiss" ]; then
+            echo " All systems go! Environment is set and Indexing works."
+          else
+            echo " Logic error: Scripts ran but files weren't saved."
+            exit 1
+          fi
