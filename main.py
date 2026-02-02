@@ -8,11 +8,9 @@ generator = MaritimeGenerator()
 metrics = []
 
 queries = [
-    "What is the main focus of the Amrit Kaal Vision 2047?",
-    "Who provided messages in the document, and what is the key message from the Prime Minister?",
-    "Describe the cover image of the document.",
-    "What are the 11 key themes identified in the Amrit Kaal Vision 2047?",
-    "What visual elements are in the Executive Summary page, and how do they relate to the content?"
+       "Existing shore-side power supplies in the world applied for different terminal type",
+        "what is LNG-Bunkering?",
+        "Tell me about Green Belt"
 ]
 
 for i, query in enumerate(queries, 1):
