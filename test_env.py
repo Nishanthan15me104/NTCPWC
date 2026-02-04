@@ -20,3 +20,5 @@ def test_check_directories():
     # We don't assert it exists yet (CI starts empty), but we check we can create it
     data_dir.mkdir(exist_ok=True)
     assert data_dir.is_dir()
+
+    #
