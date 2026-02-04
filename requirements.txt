@@ -1,24 +1,62 @@
+# AI & RAG Core
 llama-index
+llama-index-llms-groq
 llama-index-vector-stores-faiss
 llama-index-embeddings-huggingface
-llama-index-embeddings-clip
+langchain
+langchain-community
+langchain-groq
+langchain-text-splitters
+sentence-transformers
+faiss-cpu
+torch
+torchvision
+
+# Data & PDF Processing
 pymupdf
 pdf2image
-opencv-python-headless
-faiss-cpu
-sentence-transformers
-torch
+opencv-python-headless  # Crucial for Azure
+pillow
+
+# UI & Server
+streamlit
+gunicorn
 python-dotenv
-ftfy 
-regex 
+
+# Utils
 tqdm
-git+https://github.com/openai/CLIP.git
-llama-index-llms-groq
-langchain-text-splitters
-langchain-community 
-ragas 
-datasets 
-langchain-openai 
-llama-index
-langchain-groq
+ftfy
+regex
+pytest
+
+
+
+
+
+
+
+# llama-index
+# llama-index-vector-stores-faiss
+# llama-index-embeddings-huggingface
+# llama-index-embeddings-clip
+# pymupdf
+# pdf2image
+# opencv-python-headless
+# faiss-cpu
+# sentence-transformers
+# torch
+# python-dotenv
+# ftfy 
+# regex 
+# tqdm
+# git+https://github.com/openai/CLIP.git
+# llama-index-llms-groq
+# langchain-text-splitters
+# langchain-community 
+# ragas 
+# datasets 
+# langchain-openai 
+# llama-index
+# langchain-groq
+# gunicorn
 

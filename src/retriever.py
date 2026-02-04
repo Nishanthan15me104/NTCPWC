@@ -3,12 +3,11 @@ from pathlib import Path
 from typing import List
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_core.embeddings import Embeddings # Required for the wrapper
+from langchain_core.embeddings import Embeddings 
 from sentence_transformers import CrossEncoder, SentenceTransformer
 
 BASE = Path(__file__).resolve().parent.parent
 
-# --- NEW: Wrapper to make CLIP compatible with LangChain ---
 class CLIPEmbeddings(Embeddings):
     def __init__(self, model_name: str):
         self.model = SentenceTransformer(model_name)
@@ -20,53 +19,60 @@ class CLIPEmbeddings(Embeddings):
         return self.model.encode([text])[0].tolist()
 
 class MaritimeHybridRetriever:
-    def __init__(self):
-        # 1. Text-Only Embedding (BGE)
+    def __init__(self, use_images=True):
+        self.use_images = use_images
+        
+        # 1. Text-Only Embedding (Always Load)
         self.text_emb = HuggingFaceEmbeddings(
             model_name="BAAI/bge-small-en-v1.5"
         )
 
-        # 2. Multimodal Embedding (CLIP) - Wrapped for LangChain compatibility
-        print("Loading CLIP for Multimodal retrieval...")
-        self.clip_model = CLIPEmbeddings('clip-ViT-B-32')
-
-        # 3. Reranker
+        # 2. Reranker (Always Load - but it's smaller than CLIP)
         print("Loading Reranker...")
         self.reranker = CrossEncoder("BAAI/bge-reranker-base", activation_fn=None)
 
-        # 4. Load Stores
+        # 3. Load Text DB (Always Load)
         self.text_db = FAISS.load_local(
             str(BASE / "data" / "faiss" / "text"),
             self.text_emb,
             allow_dangerous_deserialization=True
         )
 
-        # Now loading the image_db with the wrapped CLIP model
-        self.image_db = FAISS.load_local(
-            str(BASE / "data" / "faiss" / "images"),
-            self.clip_model,
-            allow_dangerous_deserialization=True
-        )
+        # 4. Conditional Loading for Multimodal (The Memory Saver)
+        if self.use_images:
+            print("📸 Loading CLIP for Multimodal retrieval...")
+            self.clip_model = CLIPEmbeddings('clip-ViT-B-32')
+            
+            print("📸 Loading Image DB...")
+            self.image_db = FAISS.load_local(
+                str(BASE / "data" / "faiss" / "images"),
+                self.clip_model,
+                allow_dangerous_deserialization=True
+            )
+        else:
+            print("📝 Text-Only Mode: Skipping CLIP and Image DB to save RAM.")
+            self.clip_model = None
+            self.image_db = None
 
     def retrieve(self, query: str, top_k_final: int = 5):
         timings = {}
 
-        visual_triggers = {"image", "visual", "cover", "figure", "diagram", "photo", "illustration"}
-        need_images = any(w in query.lower() for w in visual_triggers)
-
-        # --- STAGE 1: TEXT RETRIEVAL (BGE) ---
+        # --- STAGE 1: TEXT RETRIEVAL ---
         t0 = time.time()
         text_docs = self.text_db.similarity_search(query, k=15)
         timings["text_retrieval_time"] = time.time() - t0
 
-        # --- STAGE 2: IMAGE RETRIEVAL (CLIP) ---
+        # --- STAGE 2: IMAGE RETRIEVAL (Conditional) ---
         image_docs = []
-        if need_images:
+        # Only search images if the model is loaded AND the query is visual
+        visual_triggers = {"image", "visual", "cover", "figure", "diagram", "photo", "illustration"}
+        need_images = any(w in query.lower() for w in visual_triggers)
+
+        if self.use_images and need_images and self.image_db:
             t1 = time.time()
-            # This now uses the CLIP wrapper to search pixel vectors
             imgs = self.image_db.similarity_search(query, k=10)
             
-            # Context Filtering (Matches images to pages found in text search)
+            # Context Filtering
             pages = {d.metadata.get("page_num") for d in text_docs}
             image_docs = [img for img in imgs if img.metadata.get("page_num") in pages]
             timings["image_retrieval_time"] = time.time() - t1
@@ -76,7 +82,6 @@ class MaritimeHybridRetriever:
 
         # --- STAGE 3: RERANKING ---
         t2 = time.time()
-        # Comparing query against text chunks AND image captions
         pairs = [[query, doc.page_content] for doc in initial_docs]
         scores = self.reranker.predict(pairs)
         
