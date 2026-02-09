@@ -4,7 +4,7 @@ from pathlib import Path
 from langchain_community.vectorstores import FAISS
 
 # Import our custom ONNX wrapper
-from src.onnx_utils import OnnxBgeEmbeddings
+from src.utils.onnx_utils import OnnxBgeEmbeddings
 
 # Reranker import is commented out for Free Tier
 # from sentence_transformers import CrossEncoder 
@@ -12,7 +12,8 @@ from src.onnx_utils import OnnxBgeEmbeddings
 BASE = Path(__file__).resolve().parent.parent
 
 class MaritimeHybridRetriever:
-    def __init__(self):
+    def __init__(self, use_images=False):
+        self.use_images = use_images
         # 1. Define Model Path
         self.model_path = BASE / "models" / "bge-onnx"
         
