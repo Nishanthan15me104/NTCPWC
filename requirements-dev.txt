@@ -1,0 +1,13 @@
+# Heavy libraries for CREATING data and models
+torch
+transformers
+sentence-transformers
+optimum[onnxruntime]  # Tool to convert PyTorch -> ONNX
+faiss-cpu
+onnx
+onnxruntime           # Needed locally to test the export
+langchain
+langchain-community
+pdf2image
+pymupdf
+python-dotenv

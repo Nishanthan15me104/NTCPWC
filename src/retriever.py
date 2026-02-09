@@ -1,96 +1,65 @@
 import time
+import os
 from pathlib import Path
-from typing import List
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_core.embeddings import Embeddings 
-from sentence_transformers import CrossEncoder, SentenceTransformer
+
+# Import our custom ONNX wrapper
+from src.onnx_utils import OnnxBgeEmbeddings
+
+# Reranker import is commented out for Free Tier
+# from sentence_transformers import CrossEncoder 
 
 BASE = Path(__file__).resolve().parent.parent
 
-class CLIPEmbeddings(Embeddings):
-    def __init__(self, model_name: str):
-        self.model = SentenceTransformer(model_name)
-
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        return self.model.encode(texts).tolist()
-
-    def embed_query(self, text: str) -> List[float]:
-        return self.model.encode([text])[0].tolist()
-
 class MaritimeHybridRetriever:
-    def __init__(self, use_images=True):
-        self.use_images = use_images
+    def __init__(self):
+        # 1. Define Model Path
+        self.model_path = BASE / "models" / "bge-onnx"
         
-        # 1. Text-Only Embedding (Always Load)
-        self.text_emb = HuggingFaceEmbeddings(
-            model_name="BAAI/bge-small-en-v1.5"
-        )
+        # Safety Check: Ensure the user ran the export script
+        if not self.model_path.exists():
+            raise FileNotFoundError(
+                f"🚨 ONNX Model not found at {self.model_path}. "
+                "Did you run 'export_to_onnx.py' locally first?"
+            )
 
-        # 2. Reranker (Always Load - but it's smaller than CLIP)
-        print("Loading Reranker...")
-        self.reranker = CrossEncoder("BAAI/bge-reranker-base", activation_fn=None)
+        print(f"🚀 Loading ONNX Embedding Model from {self.model_path}...")
+        self.embedding_model = OnnxBgeEmbeddings(model_path=str(self.model_path))
 
-        # 3. Load Text DB (Always Load)
+        # 2. Load FAISS Index
+        index_path = BASE / "data" / "faiss" / "text"
+        if not index_path.exists():
+             raise FileNotFoundError(f"🚨 FAISS Index not found at {index_path}.")
+
+        print("📂 Loading FAISS Index...")
         self.text_db = FAISS.load_local(
-            str(BASE / "data" / "faiss" / "text"),
-            self.text_emb,
+            str(index_path),
+            self.embedding_model,
             allow_dangerous_deserialization=True
         )
 
-        # 4. Conditional Loading for Multimodal (The Memory Saver)
-        if self.use_images:
-            print("📸 Loading CLIP for Multimodal retrieval...")
-            self.clip_model = CLIPEmbeddings('clip-ViT-B-32')
-            
-            print("📸 Loading Image DB...")
-            self.image_db = FAISS.load_local(
-                str(BASE / "data" / "faiss" / "images"),
-                self.clip_model,
-                allow_dangerous_deserialization=True
-            )
-        else:
-            print("📝 Text-Only Mode: Skipping CLIP and Image DB to save RAM.")
-            self.clip_model = None
-            self.image_db = None
+        # 3. Reranker (DISABLED for Free Tier)
+        self.reranker = None
+        # self.reranker = CrossEncoder("BAAI/bge-reranker-base")
 
-    def retrieve(self, query: str, top_k_final: int = 5):
+    def retrieve(self, query: str, top_k: int = 5):
         timings = {}
-
-        # --- STAGE 1: TEXT RETRIEVAL ---
         t0 = time.time()
-        text_docs = self.text_db.similarity_search(query, k=15)
-        timings["text_retrieval_time"] = time.time() - t0
-
-        # --- STAGE 2: IMAGE RETRIEVAL (Conditional) ---
-        image_docs = []
-        # Only search images if the model is loaded AND the query is visual
-        visual_triggers = {"image", "visual", "cover", "figure", "diagram", "photo", "illustration"}
-        need_images = any(w in query.lower() for w in visual_triggers)
-
-        if self.use_images and need_images and self.image_db:
-            t1 = time.time()
-            imgs = self.image_db.similarity_search(query, k=10)
-            
-            # Context Filtering
-            pages = {d.metadata.get("page_num") for d in text_docs}
-            image_docs = [img for img in imgs if img.metadata.get("page_num") in pages]
-            timings["image_retrieval_time"] = time.time() - t1
-
-        initial_docs = text_docs + image_docs
-        if not initial_docs: return [], timings
-
-        # --- STAGE 3: RERANKING ---
-        t2 = time.time()
-        pairs = [[query, doc.page_content] for doc in initial_docs]
-        scores = self.reranker.predict(pairs)
         
-        scored_docs = sorted(zip(initial_docs, scores), key=lambda x: x[1], reverse=True)
+        # 1. Similarity Search (Uses ONNX)
+        # We fetch slightly more docs just in case, but return top_k
+        docs = self.text_db.similarity_search(query, k=top_k)
         
-        final_docs = []
-        for doc, score in scored_docs[:top_k_final]:
-            doc.metadata["relevance_score"] = float(score)
-            final_docs.append(doc)
-
-        timings["reranking_time"] = time.time() - t2
-        return final_docs, timings
+        timings["retrieval_time"] = time.time() - t0
+        
+        # --- RERANKING (Disabled) ---
+        # If you enable this later, you must uncomment the import above
+        # and add 'sentence-transformers' to requirements.txt (Cloud).
+        #
+        # if self.reranker:
+        #     pairs = [[query, doc.page_content] for doc in docs]
+        #     scores = self.reranker.predict(pairs)
+        #     ranked = sorted(zip(docs, scores), key=lambda x: x[1], reverse=True)
+        #     docs = [doc for doc, score in ranked]
+        
+        return docs, timings
