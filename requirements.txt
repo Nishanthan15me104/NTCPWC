@@ -10,6 +10,7 @@ tokenizers==0.22.0
 numpy==1.26.4
 
 # API & Utilities
+fastapi
 llama-index-llms-groq==0.4.1
 python-dotenv==1.1.1
 
