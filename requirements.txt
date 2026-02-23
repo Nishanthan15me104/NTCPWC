@@ -7,6 +7,7 @@ faiss-cpu==1.7.4
 # The Lightweight Engine
 onnxruntime==1.23.2
 tokenizers==0.22.0
+
 numpy==1.26.4
 
 # API & Utilities
@@ -16,6 +17,9 @@ python-dotenv==1.1.1
 
 pydantic==2.11.7
 pydantic-settings==2.10.1
+
+uvicorn[standard]
+httpx
 
 
 
